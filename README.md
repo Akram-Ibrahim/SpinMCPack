@@ -36,3 +36,5 @@ This command runs the simulation using a submission script (`submission-script`)
 - `template.py`: Script to initiate and run simulations.
 - `SpinMC.py`: Core implementation of the `Spin_MonteCarlo_Simulator` class.
 
+
+The model provided in this repository was utilized to generate the results discussed in the manuscript: [arXiv:2409.19082](https://arxiv.org/abs/2409.19082).
