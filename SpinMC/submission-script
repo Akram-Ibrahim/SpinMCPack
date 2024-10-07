@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH --job-name=MC
+
+#SBATCH --output=MC.out
+#SBATCH --error=MC.err
+
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=10
+
+
+python script.py 
