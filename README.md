@@ -38,3 +38,6 @@ This command runs the simulation using a submission script (`submission-script`)
 
 
 The model provided in this repository was utilized to generate the results discussed in the manuscript: [arXiv:2409.19082](https://arxiv.org/abs/2409.19082).
+
+![image](https://github.com/user-attachments/assets/db90d7af-3153-4b20-b046-08bb6c39e82a)
+
