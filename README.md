@@ -1,6 +1,6 @@
-# SpinMCPACK - Spin Monte Carlo Simulation Package
+# SpinMCPack - Spin Monte Carlo Simulation Package
 
-SpinMCPACK is a Python package designed for performing Monte Carlo (MC) simulations of spin systems. It supports Ising, XY, and 3D Heisenberg models.
+SpinMCPack is a Python package designed for performing Monte Carlo (MC) simulations of spin systems. It supports Ising, XY, and 3D Heisenberg models.
 
 ## Features
 - Supports Ising, XY, and 3D Heisenberg models.
