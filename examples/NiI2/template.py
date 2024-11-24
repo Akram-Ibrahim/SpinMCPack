@@ -23,7 +23,7 @@ temperature = {T}
 J1 =; J2 =; J3= ; L = -0.57/1000; A = -0.77/1000 # in eV
 g=; gamma=; B_z=; E_z=
 angular_res = 0.5
-cutoff_distance = 3.41444 + 0.1  # on-lattice V-V distance + skin distance 
+cutoff_distance = 3.96124 + 0.1  # on-lattice Ni-Ni distance + skin distance 
 sampling_sweep = {sampling_sweep}; sample_size = 2e4; sampling_interval = 1
 model_type = '3D'                # Choose from Ising, XY, 3D
 ##################
