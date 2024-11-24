@@ -8,4 +8,4 @@
 #SBATCH --ntasks-per-node=10
 
 
-python script.py 
+python3 script.py 

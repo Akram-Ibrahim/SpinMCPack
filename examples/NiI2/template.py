@@ -2,12 +2,13 @@ import os, sys
 import shutil
 
 
-def create_simulation_folder(T):
-    folder_name = str(T)
+def create_simulation_folder(T, B_z, E_z):
+    # Create a folder name that includes T, B_z, and E_z
+    folder_name = f"T_{T}_B_{B_z}_E_{E_z}"
     os.makedirs(folder_name, exist_ok=True)
     return folder_name
 
-def write_script_template(folder_name, T, sampling_sweep):
+def write_script_template(folder_name, T, sampling_sweep, B_z, E_z):
     # The template script content
     script_content = f"""
 import numpy as np
@@ -21,7 +22,10 @@ n_cells = 40
 temperature = {T}
 
 J1 =; J2 =; J3= ; L = -0.57/1000; A = -0.77/1000 # in eV
-g=; gamma=; B_z=; E_z=
+g = ...           # Replace with actual g-factor
+gamma = ...       # Replace with actual gamma in e·Å
+B_z = {B_z}       # Magnetic field strength in Tesla
+E_z = {E_z}       # Electric field strength in V/Å
 angular_res = 0.5
 cutoff_distance = 3.96124 + 0.1  # on-lattice Ni-Ni distance + skin distance 
 sampling_sweep = {sampling_sweep}; sample_size = 2e4; sampling_interval = 1
@@ -35,6 +39,13 @@ prim_struc = read('POSCAR-conv')
 # Make supercell
 super_struc = make_supercell(prim_struc, np.array([[n_cells, 0, 0], [0, round(n_cells/3**.5), 0], [0, 0, 1]]))
 ##################
+
+# **Avoid small negative positions from ASE to ensure adaptability with cKDTree**
+# Clip the positions to be non-negative
+non_negative_positions = np.clip(super_struc.positions, 0, None)
+
+# Set the clipped positions back to the structure
+super_struc.set_positions(non_negative_positions)
 
 # occupation list
 ##################
@@ -141,28 +152,48 @@ print("Finished successfully ...")
 def copy_common_files(folder_name):
     shutil.copy('SpinMC.py', folder_name)
     shutil.copy('submission-script', folder_name)
+    # Ensure 'POSCAR-conv' is copied to the folder
+    shutil.copy('POSCAR-conv', folder_name)
 
 def run_sbatch(folder_name):
     os.chdir(folder_name)
     os.system("sbatch submission-script")
     os.chdir("..")
 
-def main(T, sampling_sweep):
-    folder_name = create_simulation_folder(T)
-    write_script_template(folder_name, T, sampling_sweep)
+def main(T, sampling_sweep, B_z, E_z):
+    folder_name = create_simulation_folder(T, B_z, E_z)
+    write_script_template(folder_name, T, sampling_sweep, B_z, E_z)
     copy_common_files(folder_name)
     run_sbatch(folder_name)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python template.py <temperature> <sampling_sweep>")
+    if len(sys.argv) != 5:
+        print("Usage: python template.py <temperature> <sampling_sweep> <B_z> <E_z>")
         sys.exit(1)
 
     try:
-        T_input = int(sys.argv[1])
+        T_input = float(sys.argv[1])
     except ValueError:
-        print("Error: Temperature must be an integer.")
+        print("Error: Temperature must be a number.")
         sys.exit(1)
 
-    sampling_sweep_input = float(sys.argv[2])
-    main(T_input, sampling_sweep_input)
+    try:
+        sampling_sweep_input = float(sys.argv[2])
+    except ValueError:
+        print("Error: Sampling sweep must be a number.")
+        sys.exit(1)
+
+    try:
+        B_z_input = float(sys.argv[3])
+    except ValueError:
+        print("Error: B_z must be a number (magnetic field in Tesla).")
+        sys.exit(1)
+
+    try:
+        E_z_input = float(sys.argv[4])
+    except ValueError:
+        print("Error: E_z must be a number (electric field in V/Å).")
+        sys.exit(1)
+
+    main(T_input, sampling_sweep_input, B_z_input, E_z_input)  
+  
