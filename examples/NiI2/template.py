@@ -20,7 +20,7 @@ import SpinMC
 n_cells = 40
 temperature = {T}
 
-J1 =; J2 =; J3=, ; L = -0.57/1000; A = -0.77/1000 # in eV
+J1 =; J2 =; J3= ; L = -0.57/1000; A = -0.77/1000 # in eV
 g=; gamma=; B_z=; E_z=
 angular_res = 0.5
 cutoff_distance = 3.41444 + 0.1  # on-lattice V-V distance + skin distance 
