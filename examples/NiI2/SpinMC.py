@@ -254,9 +254,9 @@ class Spin_MonteCarlo_Simulator:
         plot_magnetization_convergence([np.linalg.norm(m) for m in ensemble_magnetizations], self.temperature)
         
         # Save
-        np.save(f'energies/ensemble_energies_T{self.temperature}.npy', ensemble_energies)
-        np.save(f'spin_configs/ensemble_magnetizations_T{self.temperature}.npy', ensemble_magnetizations)
-        np.save(f'spin_configs/min_spin_config_T{self.temperature}.npy', spin_config_min)
+        np.save(f'energies/ensemble_energies.npy', ensemble_energies)
+        np.save(f'spin_configs/ensemble_magnetizations.npy', ensemble_magnetizations)
+        np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
         
 
 ##########  
