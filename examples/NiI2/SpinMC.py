@@ -253,7 +253,7 @@ class Spin_MonteCarlo_Simulator:
 
                     sampling_count += 1
 
-            if sweep % 20 == 0:
+            if sweep % 200 == 0:
                 # Plot property convergence
                 plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
                 plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], primary_label='normalized magnetization', y_lim=(0,1))
