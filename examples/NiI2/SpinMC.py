@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from ase.units import kB
 from scipy.spatial import cKDTree
+from scipy.spatial import Delaunay
 
 class Spin_MonteCarlo_Simulator:
     def __init__(self, structure, temperature, 
@@ -179,6 +180,7 @@ class Spin_MonteCarlo_Simulator:
 
         ensemble_energies = []
         ensemble_magnetizations = []
+        ensemble_topological_charges = []
         spin_config_min = initial_spin_config
         
         num_sweeps = int(sampling_sweep + sample_size * sampling_interval)
@@ -238,24 +240,34 @@ class Spin_MonteCarlo_Simulator:
                 if sampling_count % sampling_interval == 0:
                     # Sample energy
                     ensemble_energies.append(energy)
+                    
                     # Calculate the magnetization of the spin_config
                     m = calculate_normalized_magnetization(spin_config)
+                    # Calculate the topological charge of the spin_config
+                    Q = calculate_topological_charge(spin_config)
+
+                    # Sample m 
                     ensemble_magnetizations.append(m)
+                    # Sample Q 
+                    ensemble_topological_charges.append(Q)
 
                     sampling_count += 1
 
+            if sweep % 20 == 0:
+                # Plot property convergence
+                plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
+                plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], y_lim=(0,1))
+                plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges)
+                
 
             progress_bar.update(1)
 
         progress_bar.close()
         
-        # Plot property convergence
-        plot_energy_convergence(sampled_energies, gs_energies, self.temperature)
-        plot_magnetization_convergence([np.linalg.norm(m) for m in ensemble_magnetizations], self.temperature)
-        
         # Save
         np.save(f'energies/ensemble_energies.npy', ensemble_energies)
         np.save(f'spin_configs/ensemble_magnetizations.npy', ensemble_magnetizations)
+        np.save(f'spin_configs/ensemble_topological_charges.npy', ensemble_topological_charges)
         np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
         
 
@@ -313,36 +325,117 @@ def calculate_normalized_magnetization(spin_config):
 
     return magnetization                                            
                                                                                                                                
-##########     
+########## 
 
-def plot_energy_convergence(sampled_energies, gs_energies, temperature):
-        # Plot energy curve
-        # Create a list of step numbers for the x-axis
-        steps = list(range(len(sampled_energies)))
-        # Plot the sampled energies and ground state energies
-        plt.figure(figsize=(8, 6), dpi=200)
-        plt.plot(steps, sampled_energies, label='Sampled Energies', color='blue', alpha=0.4)
-        plt.plot(steps, gs_energies, label='Ground State Energies', color='red', alpha=0.4)
-        plt.xlabel('MC Sweeps', fontsize=14)
-        plt.ylabel('Energy (eV)', fontsize=14)
-        plt.title(f'Monte Carlo Simulation (Temperature = {temperature} K)', fontsize=17)
-        plt.legend()
-        plt.grid(True)
-        # Save the energy plot
-        plt.savefig(f'Energy_{temperature}.png')
-        
-def plot_magnetization_convergence(ensemble_magnetizations, temperature):
-        # Plot magnetization curve
-        # Create a list of step numbers for the x-axis
-        steps = list(range(len(ensemble_magnetizations)))
-        # Plot the ensemble magnetizations
-        plt.figure(figsize=(8, 6), dpi=200)
-        plt.plot(steps, ensemble_magnetizations, color='blue', alpha=0.4)
-        plt.xlabel('MC Sweeps', fontsize=14)
-        plt.ylabel('Normalized Magnetization', fontsize=14)
-        plt.title(f'Monte Carlo Simulation (Temperature = {temperature} K)', fontsize=17)
-        plt.grid(True)
-        plt.ylim(0, 1)  
-        # Save the magnetization plot
-        plt.savefig(f'Magnetization_{temperature}.png')        
+def calculate_topological_charge(spin_config):
+    """
+    Calculate the topological charge (sum of the solid angles) of a 2D spin configuration.
+    Args:
+        spin_config (np.ndarray): Spin configuration array of shape (N, 4).
+    Returns:
+        float: The total topological charge (Q = sum of Ω_i) over all triangular plaquettes.
+    """
+    # Extract x, y, theta, phi
+    x = spin_config[:, 0]
+    y = spin_config[:, 1]
+    theta = np.radians(spin_config[:, 2])
+    phi   = np.radians(spin_config[:, 3])
+
+    # Convert the spin angles into 3D spin vectors: s = (Sx, Sy, Sz)
+    Sx = np.sin(theta) * np.cos(phi)
+    Sy = np.sin(theta) * np.sin(phi)
+    Sz = np.cos(theta)
+
+    spins = np.column_stack((Sx, Sy, Sz))
+    coords = np.column_stack((x, y))
+
+    # Perform Delaunay triangulation
+    delaunay_tri = Delaunay(coords)
+    simplices = delaunay_tri.simplices  # shape: (NT, 3)
+
+    # Gather the spins for each vertex in each triangle
+    # For each triangle, we have three indices (i1, i2, i3) pointing to spins array.
+    i1 = simplices[:, 0]
+    i2 = simplices[:, 1]
+    i3 = simplices[:, 2]
+
+    S1 = spins[i1]  # shape (NT, 3)
+    S2 = spins[i2]  # shape (NT, 3)
+    S3 = spins[i3]  # shape (NT, 3)
+
+    # Calculate the numerator: s1 · (s2 x s3), for each triangle in a vectorized manner
+    cross_S2_S3 = np.cross(S2, S3, axis=1)       # shape (NT, 3)
+    numerator   = np.einsum('ij,ij->i', S1, cross_S2_S3)  # shape (NT,)
+
+    # Calculate the denominator: 1 + s1·s2 + s1·s3 + s2·s3
+    dot_S1_S2 = np.einsum('ij,ij->i', S1, S2)     # shape (NT,)
+    dot_S1_S3 = np.einsum('ij,ij->i', S1, S3)
+    dot_S2_S3 = np.einsum('ij,ij->i', S2, S3)
+    denom = 1.0 + dot_S1_S2 + dot_S1_S3 + dot_S2_S3
+
+    # Calculate local solid angles for each triangle
+    Omega = 2.0 * np.arctan2(numerator, denom)
+
+    # Sum over all triangles to get total topological charge
+    total_charge = np.sum(Omega)
+
+    return total_charge
+
+##########             
                                                    
+def plot_convergence(
+    y_label,    
+    primary_data,
+    primary_label,
+    secondary_data=None,
+    secondary_label=None,
+    y_lim=None
+):
+    """
+    A unified function to plot one or two datasets against Monte Carlo sweeps.
+
+    Parameters
+    ----------
+    y_label : str
+        The label for the y-axis (e.g., "Energy (eV)" or "Normalized Magnetization").  
+    primary_data : array-like
+        The main data series to be plotted (e.g., sampled energies, magnetization).
+    primary_label : str
+        Label for the primary data series (e.g., "Sampled Energies").
+    secondary_data : array-like, optional
+        A secondary dataset to be plotted (e.g., ground state energies).
+        If None, only the primary dataset is plotted.
+    secondary_label : str, optional
+        Label for the secondary data series (e.g., "Ground State Energies").  
+    y_lim : tuple, optional
+        A tuple (ymin, ymax) specifying the limits of the y-axis. 
+        If None, the y-axis is determined automatically.
+    """
+
+    # Create a list of steps for the x-axis
+    steps = range(len(primary_data))
+
+    # Initialize the figure
+    plt.figure(figsize=(8, 6), dpi=200)
+
+    # Plot the primary data
+    plt.plot(steps, primary_data, label=primary_label, color='teal', alpha=0.4)
+
+    # Plot the reference data, if provided
+    if secondary_data is not None:
+        plt.plot(steps, secondary_data, label=secondary_label, color='crimson', alpha=0.4)
+        plt.legend()
+
+    # Configure labels, title, legend, and grid
+    plt.xlabel('MC Sweeps', fontsize=14)
+    plt.ylabel(y_label, fontsize=14)
+    
+    plt.grid(True)
+
+    # If a y-limit is specified, apply it
+    if y_lim is not None:
+        plt.ylim(y_lim)
+
+    # Save the figure
+    plt.savefig(f'{primary_label}.png')
+    plt.close()  
