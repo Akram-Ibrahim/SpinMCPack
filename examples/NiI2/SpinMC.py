@@ -256,8 +256,8 @@ class Spin_MonteCarlo_Simulator:
             if sweep % 20 == 0:
                 # Plot property convergence
                 plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
-                plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], y_lim=(0,1))
-                plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges)
+                plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], primary_label='normalized magnetization', y_lim=(0,1))
+                plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges, primary_label='topological charge')
                 
 
             progress_bar.update(1)
