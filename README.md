@@ -1,11 +1,11 @@
 # SpinMCPack - Spin Monte Carlo Simulation Package
 
-SpinMCPack is a Python package designed for performing Monte Carlo (MC) simulations of spin systems. It supports Ising, XY, and 3D Heisenberg models.
+SpinMCPack is a Python package designed for performing Monte Carlo (MC) simulations of spin systems. It supports Ising, XY, and 3D Heisenberg models. Is also features options for incorporating external magnetic and electric fields.
 
 ## Features
 - Supports Ising, XY, and 3D Heisenberg models.
-- Configurable parameters include temperature, interaction strengths, spin orientations, number of cells, magnetic interaction parameters, sample size, sampling interval, and angular resolution of spin orientations.
-- Provides plots for energy and magnetization convergence.
+- Configurable parameters include temperature, spin orientations, supercell size, interaction parameters, number of equilibration steps, ensemble size, sampling interval, angular resolution of spins, and external field strength.
+- Provides convergence and phase transition plots for energy, magnetization, topological charge, and their susceptibilities.
 
 
 ## Prerequisites
@@ -18,14 +18,14 @@ Clone the repository:
 ## Usage
 Edit `template.py`:
 - Modify parameters such as number of cells, magnetic interaction parameters, sample size, sampling interval, angular resolution of spin orientations, etc., as needed.
-- Usage: `python template.py <temperature> <sampling_sweep>`
+- Usage: `python template.py <temperature> <sampling_sweep> <B_z> <E_z>`
 
 This command runs the simulation using a submission script (`submission-script`) which can be adjusted according to user-specific computational resources.
 
 ## Output Files
 - Energies: saved in the `energies` directory.
 - Spin configurations: saved in the `spin_configs` directory.
-- Convergence plots: saved as `Energy_<temperature>.png` and `Magnetization_<temperature>.png`.
+- Convergence plots are saved for Energy, Normalized Magnetization, and Topological Charge.
 
 ## Key Components
 - `Spin_MonteCarlo_Simulator`: Main class for running MC simulations.
