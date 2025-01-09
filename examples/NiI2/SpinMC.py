@@ -178,6 +178,7 @@ class Spin_MonteCarlo_Simulator:
         sampled_energies = []
         gs_energies = []
 
+        ensemble_spin_configs = []
         ensemble_energies = []
         ensemble_magnetizations = []
         ensemble_topological_charges = []
@@ -251,6 +252,8 @@ class Spin_MonteCarlo_Simulator:
                     # Sample Q 
                     ensemble_topological_charges.append(Q)
 
+                    ensemble_spin_configs.append(spin_config)
+
                     sampling_count += 1
 
             if sweep % 200 == 0:
@@ -258,6 +261,7 @@ class Spin_MonteCarlo_Simulator:
                 plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
                 plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], primary_label='normalized magnetization', y_lim=(0,1))
                 plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges, primary_label='topological charge')
+                np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
                 
 
             progress_bar.update(1)
