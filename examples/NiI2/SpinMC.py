@@ -181,6 +181,7 @@ class Spin_MonteCarlo_Simulator:
         ensemble_spin_configs = []
         ensemble_energies = []
         ensemble_magnetizations = []
+        ensemble_local_solid_angles = []
         ensemble_topological_charges = []
         spin_config_min = initial_spin_config
         
@@ -244,14 +245,22 @@ class Spin_MonteCarlo_Simulator:
                     
                     # Calculate the magnetization of the spin_config
                     m = calculate_normalized_magnetization(spin_config)
-                    # Calculate the topological charge of the spin_config
-                    Q = calculate_topological_charge(spin_config)
-
                     # Sample m 
                     ensemble_magnetizations.append(m)
+
+                    # Get centroids & local solid angles
+                    tri_centers, local_omegas = calculate_local_solid_angles(spin_config)
+                    # Stack centroids (x, y) with local_omegas into one array
+                    local_solid_angles = np.column_stack((tri_centers, local_omegas))
+                    # Sample local solid angles
+                    ensemble_local_solid_angles.append(local_solid_angles)
+
+                    # Compute the net topological charge from local solid angles
+                    Q = calculate_topological_charge_from_angles(local_omegas)
                     # Sample Q 
                     ensemble_topological_charges.append(Q)
 
+                    # Sample spin configs
                     ensemble_spin_configs.append(spin_config)
 
                     sampling_count += 1
@@ -261,7 +270,7 @@ class Spin_MonteCarlo_Simulator:
                 plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
                 plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], primary_label='normalized magnetization', y_lim=(0,1))
                 plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges, primary_label='topological charge')
-                np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
+                
                 
 
             progress_bar.update(1)
@@ -271,8 +280,10 @@ class Spin_MonteCarlo_Simulator:
         # Save
         np.save(f'energies/ensemble_energies.npy', ensemble_energies)
         np.save(f'spin_configs/ensemble_magnetizations.npy', ensemble_magnetizations)
+        np.save(f'spin_configs/ensemble_local_solid_angles.npy', ensemble_local_solid_angles)
         np.save(f'spin_configs/ensemble_topological_charges.npy', ensemble_topological_charges)
         np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
+        np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
         
 
 ##########  
@@ -311,7 +322,7 @@ def calculate_normalized_magnetization(spin_config):
     Args:
         spin_config (np.ndarray): Spin configuration.
     Returns:
-        np.ndarray: Magnetization vector.
+        magnetization (np.ndarray): Magnetization vector.
     """
     # Extract x, y, theta, and phi from the input spin configuration
     x = spin_config[:, 0]
@@ -331,59 +342,106 @@ def calculate_normalized_magnetization(spin_config):
                                                                                                                                
 ########## 
 
-def calculate_topological_charge(spin_config):
+def calculate_local_solid_angles(spin_config):
     """
-    Calculate the topological charge (sum of the solid angles) of a 2D spin configuration.
+    Compute the local solid angle for each Delaunay triangular plaquette in a 2D spin configuration and 
+    return the centroid associated with each triangle along with the local solid angle.
     Args:
-        spin_config (np.ndarray): Spin configuration array of shape (N, 4).
+        spin_config (np.ndarray): Spin configuration.
     Returns:
-        float: The total topological charge (Q = sum of Ω_i) over all triangular plaquettes.
+        tri_centroids (np.ndarray): shape (NT, 2), the (x, y) positions associated with each triangle's centroid.
+        local_omegas  (np.ndarray): shape (NT,), local solid angles (in radians), each typically in [-π, +π].
     """
-    # Extract x, y, theta, phi
+    # ---------------------------------------------------------------
+    # 1) EXTRACT COORDS AND SPIN ANGLES
+    # ---------------------------------------------------------------
     x = spin_config[:, 0]
     y = spin_config[:, 1]
     theta = np.radians(spin_config[:, 2])
     phi   = np.radians(spin_config[:, 3])
 
-    # Convert the spin angles into 3D spin vectors: s = (Sx, Sy, Sz)
-    Sx = np.sin(theta) * np.cos(phi)
-    Sy = np.sin(theta) * np.sin(phi)
-    Sz = np.cos(theta)
+    # Convert spin angles into 3D spin vectors
+    spin_x = np.sin(theta) * np.cos(phi)
+    spin_y = np.sin(theta) * np.sin(phi)
+    spin_z = np.cos(theta)
+    spins = np.column_stack((spin_x, spin_y, spin_z))
 
-    spins = np.column_stack((Sx, Sy, Sz))
-    coords = np.column_stack((x, y))
+    # 2D real-space coordinates (for Delaunay)
+    coords_2d = np.column_stack((x, y))
 
-    # Perform Delaunay triangulation
-    delaunay_tri = Delaunay(coords)
-    simplices = delaunay_tri.simplices  # shape: (NT, 3)
+    # ---------------------------------------------------------------
+    # 2) DELAUNAY TRIANGULATION
+    # ---------------------------------------------------------------
+    delaunay_tri = Delaunay(coords_2d)
+    simplices = delaunay_tri.simplices  # shape (NT, 3)
 
-    # Gather the spins for each vertex in each triangle
-    # For each triangle, we have three indices (i1, i2, i3) pointing to spins array.
-    i1 = simplices[:, 0]
-    i2 = simplices[:, 1]
-    i3 = simplices[:, 2]
+    # Indices of the 3 vertices for each triangle
+    i1, i2, i3 = simplices[:, 0], simplices[:, 1], simplices[:, 2]
 
-    S1 = spins[i1]  # shape (NT, 3)
-    S2 = spins[i2]  # shape (NT, 3)
-    S3 = spins[i3]  # shape (NT, 3)
+    # Gather spin vectors for each triangle
+    spin1 = spins[i1]  # shape (NT, 3)
+    spin2 = spins[i2]
+    spin3 = spins[i3]
 
-    # Calculate the numerator: s1 · (s2 x s3), for each triangle in a vectorized manner
-    cross_S2_S3 = np.cross(S2, S3, axis=1)       # shape (NT, 3)
-    numerator   = np.einsum('ij,ij->i', S1, cross_S2_S3)  # shape (NT,)
+    # ---------------------------------------------------------------
+    # 3) COMPUTE THE SCALAR TRIPLE PRODUCT (NUMERATOR)
+    #    numerator = spin1 · (spin2 x spin3)
+    # ---------------------------------------------------------------
+    cross_spin2_spin3 = np.cross(spin2, spin3, axis=1)       # (NT, 3)
+    numerator = np.einsum('ij,ij->i', spin1, cross_spin2_spin3)  # (NT,)
 
-    # Calculate the denominator: 1 + s1·s2 + s1·s3 + s2·s3
-    dot_S1_S2 = np.einsum('ij,ij->i', S1, S2)     # shape (NT,)
-    dot_S1_S3 = np.einsum('ij,ij->i', S1, S3)
-    dot_S2_S3 = np.einsum('ij,ij->i', S2, S3)
-    denom = 1.0 + dot_S1_S2 + dot_S1_S3 + dot_S2_S3
+    # ---------------------------------------------------------------
+    # 4) COMPUTE THE DENOMINATOR = 1 + spin1·spin2 + spin1·spin3 + spin2·spin3
+    # ---------------------------------------------------------------
+    dot_spin1_spin2 = np.einsum('ij,ij->i', spin1, spin2)
+    dot_spin1_spin3 = np.einsum('ij,ij->i', spin1, spin3)
+    dot_spin2_spin3 = np.einsum('ij,ij->i', spin2, spin3)
+    denom = 1.0 + dot_spin1_spin2 + dot_spin1_spin3 + dot_spin2_spin3
 
-    # Calculate local solid angles for each triangle
-    Omega = 2.0 * np.arctan2(numerator, denom)
+    # ---------------------------------------------------------------
+    # 5) WINDING DIRECTION OF EACH TRIANGLE
+    #    - Compute the normal to each triangle in the xy-plane to determine if it's oriented CW or CCW
+    # ---------------------------------------------------------------
+    pos1 = coords_2d[i1]  # (NT, 2)
+    pos2 = coords_2d[i2]
+    pos3 = coords_2d[i3]
 
-    # Sum over all triangles to get total topological charge
-    total_charge = np.sum(Omega)
+    AB = pos2 - pos1  # (NT, 2)
+    AC = pos3 - pos1
 
-    return total_charge
+    # Convert 2D vectors to 3D by appending z=0
+    AB_3D = np.column_stack((AB, np.zeros(len(AB))))
+    AC_3D = np.column_stack((AC, np.zeros(len(AC))))
+
+    tri_normal = np.cross(AB_3D, AC_3D)        # shape (NT, 3)
+    sign_normal  = np.sign(tri_normal[:, 2])   # +1 if CCW, -1 if CW
+
+    # ---------------------------------------------------------------
+    # 6) LOCAL SOLID ANGLES
+    raw_angles = 2.0 * np.arctan2(numerator, denom)
+    local_omegas = sign_normal * raw_angles   # shape (NT,)
+
+    # ---------------------------------------------------------------
+    # 7) TRIANGLE CENTROIDS
+    #    - We'll associate each local angle with the centroid of its triangle, i.e. (pos1 + pos2 + pos3)/3
+    # ---------------------------------------------------------------
+    tri_centroids = (pos1 + pos2 + pos3) / 3.0  # shape (NT, 2)
+
+    return tri_centroids, local_omegas
+
+##########  
+
+def calculate_topological_charge_from_angles(local_omegas):
+    """
+    Given an array of local solid angles (one for each Delaunay triangular plaquette in a 2D spin configuration), compute the net 
+    topological (skyrmion) charge.
+    Args:
+        local_omegas (np.ndarray): shape (NT,), local angles in [-π, +π].
+    Returns:
+        float: The topological charge (skyrmion number), Q = Σ local_omegas.
+    """
+    Q = np.sum(local_omegas)
+    return Q
 
 ##########             
                                                    
@@ -420,7 +478,7 @@ def plot_convergence(
     steps = range(len(primary_data))
 
     # Initialize the figure
-    plt.figure(figsize=(8, 6), dpi=200)
+    plt.figure(figsize=(6, 4), dpi=200)
 
     # Plot the primary data
     plt.plot(steps, primary_data, label=primary_label, color='teal', alpha=0.4)
