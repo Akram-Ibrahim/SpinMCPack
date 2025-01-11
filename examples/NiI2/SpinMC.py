@@ -4,8 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from ase.units import kB
-from scipy.spatial import cKDTree
+from ase.neighborlist import neighbor_list
 from scipy.spatial import Delaunay
+
 
 class Spin_MonteCarlo_Simulator:
     def __init__(self, structure, temperature, 
@@ -270,49 +271,44 @@ class Spin_MonteCarlo_Simulator:
                 plot_convergence(y_label='Energy', primary_data=sampled_energies, primary_label='sampled energy', secondary_data=gs_energies, secondary_label='ground-state energy')
                 plot_convergence(y_label='Normalized Magnetization', primary_data=[np.linalg.norm(m) for m in ensemble_magnetizations], primary_label='normalized magnetization', y_lim=(0,1))
                 plot_convergence(y_label='Topological Charge', primary_data=ensemble_topological_charges, primary_label='topological charge')
-                
-                
 
+                # Save
+                np.save(f'energies/ensemble_energies.npy', ensemble_energies)
+                np.save(f'spin_configs/ensemble_magnetizations.npy', ensemble_magnetizations)
+                np.save(f'spin_configs/ensemble_local_solid_angles.npy', ensemble_local_solid_angles)
+                np.save(f'spin_configs/ensemble_topological_charges.npy', ensemble_topological_charges)
+                np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
+                np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
+                
             progress_bar.update(1)
 
         progress_bar.close()
-        
-        # Save
-        np.save(f'energies/ensemble_energies.npy', ensemble_energies)
-        np.save(f'spin_configs/ensemble_magnetizations.npy', ensemble_magnetizations)
-        np.save(f'spin_configs/ensemble_local_solid_angles.npy', ensemble_local_solid_angles)
-        np.save(f'spin_configs/ensemble_topological_charges.npy', ensemble_topological_charges)
-        np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
-        np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
         
 
 ##########  
 ##########                                              
                                             
-def find_nearest_neighbors(structure, site_index, cutoff_distance):
+def find_nearest_neighbors(structure, site_index, first_cutoff, second_cutoff, third_cutoff):
     
-    # Extract atomic positions and IDs
-    atomic_positions = structure.get_positions()
-    atomic_ids = list(range(len(atomic_positions)))
-
-    # Build a KD tree from the atomic positions
-    kd_tree = cKDTree(atomic_positions, boxsize=structure.cell.cellpar()[0:3])
-
-    # Query the KD tree to find the nearest neighbors
-    f_nn_indices= kd_tree.query_ball_point(atomic_positions[site_index][:], cutoff_distance)
-    fs_nn_indices= kd_tree.query_ball_point(atomic_positions[site_index][:], 3**.5 * cutoff_distance)
-    s_nn_indices= np.setdiff1d(fs_nn_indices, f_nn_indices)
-    fst_nn_indices= kd_tree.query_ball_point(atomic_positions[site_index][:], 2 * cutoff_distance)
-    t_nn_indices= np.setdiff1d(fst_nn_indices, fs_nn_indices)
-
-    # Map the indices back to the original ASE structure
-    f_nn_indices = (np.array(atomic_ids)[f_nn_indices]).tolist()
-    s_nn_indices = (np.array(atomic_ids)[s_nn_indices]).tolist()
-    t_nn_indices = (np.array(atomic_ids)[t_nn_indices]).tolist()
+    # Get indices and distances of neighbors up to the third cutoff
+    indices, positions, distances = neighbor_list('ijd', structure, third_cutoff, self_interaction=False)
     
-    f_nn_indices.remove(site_index)
+    # Filter to get only neighbors for the site of interest
+    mask = (indices == site_index)
+    neighbor_indices = positions[mask]
+    neighbor_distances = distances[mask]
 
-    return f_nn_indices, s_nn_indices, t_nn_indices                                            
+    # Determine first, second, and third neighbors based on distances
+    f_nn_indices = neighbor_indices[neighbor_distances <= first_cutoff].tolist()
+    s_nn_indices = neighbor_indices[(neighbor_distances > first_cutoff) & (neighbor_distances <= second_cutoff)].tolist()
+    t_nn_indices = neighbor_indices[(neighbor_distances > second_cutoff) & (neighbor_distances <= third_cutoff)].tolist()
+
+    # Sort the neighbor indices before returning
+    f_nn_indices.sort()
+    s_nn_indices.sort()
+    t_nn_indices.sort()
+
+    return f_nn_indices, s_nn_indices, t_nn_indices                                           
    
 ##########                                             
                                             
@@ -436,7 +432,7 @@ def calculate_topological_charge_from_angles(local_omegas):
     Given an array of local solid angles (one for each Delaunay triangular plaquette in a 2D spin configuration), compute the net 
     topological (skyrmion) charge.
     Args:
-        local_omegas (np.ndarray): shape (NT,), local angles in [-π, +π].
+        local_omegas (np.ndarray): local solid angles, shape (NT,).
     Returns:
         float: The topological charge (skyrmion number), Q = Σ local_omegas.
     """

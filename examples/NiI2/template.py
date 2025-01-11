@@ -21,7 +21,7 @@ import SpinMC
 n_cells = 40
 temperature = {T}
 
-J1 =; J2 =; J3= ; L = -0.57/1000; A = -0.77/1000 # in eV
+J1 =; J2 =; J3= ; L = ; A =  # in eV
 g = ...           # Replace with actual g-factor
 gamma = ...       # Replace with actual gamma in e·Å
 B_z = {B_z}       # Magnetic field strength in Tesla
@@ -35,17 +35,11 @@ model_type = '3D'                # Choose from Ising, XY, 3D
 # Read structure
 ##################
 # Read primitive structure
-prim_struc = read('POSCAR-conv')
+prim_struc = read('POSCAR-prim')
 # Make supercell
-super_struc = make_supercell(prim_struc, np.array([[n_cells, 0, 0], [0, round(n_cells/3**.5), 0], [0, 0, 1]]))
+super_struc = make_supercell(prim_struc, np.array([[n_cells, 0, 0], [0, n_cells, 0], [0, 0, 1]]))
 ##################
 
-# **Avoid small negative positions from ASE to ensure adaptability with cKDTree**
-# Clip the positions to be non-negative
-non_negative_positions = np.clip(super_struc.positions, 0, None)
-
-# Set the clipped positions back to the structure
-super_struc.set_positions(non_negative_positions)
 
 # occupation list
 ##################
@@ -115,7 +109,7 @@ s_neighbor_array = []
 t_neighbor_array = []
 
 for i, at in enumerate(super_struc):
-    f_neighbor_indices, s_neighbor_indices, t_neighbor_indices = SpinMC.find_nearest_neighbors(super_struc, i, cutoff_distance)
+    f_neighbor_indices, s_neighbor_indices, t_neighbor_indices = SpinMC.find_nearest_neighbors(super_struc, i, cutoff_distance, 3**.5 * cutoff_distance, 2 * cutoff_distance)
     f_neighbor_array.append(f_neighbor_indices)    
     s_neighbor_array.append(s_neighbor_indices)    
     t_neighbor_array.append(t_neighbor_indices) 
