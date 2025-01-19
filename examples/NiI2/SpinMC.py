@@ -380,7 +380,7 @@ class Spin_MonteCarlo_Simulator:
                 np.save(f'spin_configs/ensemble_local_solid_angles.npy', ensemble_local_solid_angles)
                 np.save(f'spin_configs/ensemble_topological_charges.npy', ensemble_topological_charges)
                 np.save(f'spin_configs/min_spin_config.npy', spin_config_min)
-                np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
+                #np.save(f'spin_configs/ensemble_spin_configs.npy', ensemble_spin_configs)
                 
             progress_bar.update(1)
 
