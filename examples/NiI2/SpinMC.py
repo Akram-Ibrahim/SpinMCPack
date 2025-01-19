@@ -9,45 +9,96 @@ from scipy.spatial import Delaunay
 
 
 class Spin_MonteCarlo_Simulator:
-    def __init__(self, structure, temperature, 
-                 J1, J2, J3, L, A, 
-                 g, gamma, B_z, E_z,
-                 orientations_lst, f_neighbor_array, s_neighbor_array, t_neighbor_array,
-                 random_seed=None):
+    def __init__(
+        self,
+        structure,
+        temperature,
+        # Isotropic exchanges
+        J1, 
+        J2, 
+        J3,
+        # Anisotropic exchange parameters (for 1st NN only)
+        Jxx,
+        Jyy,
+        Jzz,
+        Jxy,
+        Jxz,
+        Jyz,
+        # Single-ion anisotropy
+        A,
+        # Zeeman and electric field terms
+        g,
+        gamma,
+        B_z,
+        E_z,
+        spin_magnitude,  # Spin magnitude parameter
+        orientations_lst,
+        f_neighbor_array,
+        s_neighbor_array,
+        t_neighbor_array,
+        random_seed=None
+    ):
         """
-        Initialize a Spin Monte Carlo simulator.
+        Initialize a Spin Monte Carlo simulator with generic spin Hamiltonian terms:
 
-        Parameters:
-        - structure (ase.Atoms): Atomic structure for the simulation (Positions of the structure must be all positive!).
-        - temperature (float): Temperatures (in Kelvin) for Monte Carlo simulation.
-        - J1 (float): The first NN isotropic exchange parameter in eV.
-        - J2 (float): The second NN isotropic exchange parameter in eV.
-        - J3 (float): The third NN isotropic exchange parameter in eV.
-        - L (float): The anisotropic symmetric exchange parameter in eV.
-        - A (float): The easy-axis single ion anisotropy parameter in eV.
-        - g (float): Landé g-factor
-        - gamma (float): Electric field coupling constant in e.Å (e is the electron charge in SI units)
-        - B_z (float): Magnetic field strength in Tesla
-        - E_z (float): Electric field strength in V/Å
-        - orientations_lst (list of tuple): List of (theta, phi) pairs in degrees, representing the initial spin orientations.
-        - f_neighbor_array (numpy.ndarray): Array of first NN neighbor indices for each site in the structure.
-        - s_neighbor_array (numpy.ndarray): Array of second NN neighbor indices for each site in the structure.
-        - t_neighbor_array (numpy.ndarray): Array of third NN neighbor indices for each site in the structure.
+        H = - (J1/2) * Σ_{<i,j>'} (Si · Sj)
+            - (J2/2) * Σ_{<i,k>''} (Si · Sk)
+            - (J3/2) * Σ_{<i,l>'''} (Si · Sl)
+            -----------------------------------------
+            - (Jxx/2) * Σ_{<i,j>'} (Sx_i * Sx_j)
+            - (Jyy/2) * Σ_{<i,j>'} (Sy_i * Sy_j)
+            - (Jzz/2) * Σ_{<i,j>'} (Sz_i * Sz_j)
+            - (Jxy/2) * Σ_{<i,j>'} (Sx_i * Sy_j)
+            - (Jxz/2) * Σ_{<i,j>'} (Sx_i * Sz_j)
+            - (Jyz/2) * Σ_{<i,j>'} (Sy_i * Sz_j)
+            -----------------------------------------
+            - A * Σ_i (Sz_i)^2
+            - g μB Bz Σ_i (Sz_i)
+            - γ Ez Σ_i (Sz_i)
+
+        Args:
+            structure (ase.Atoms): Atomic structure (positions must be all positive!).
+            temperature (float): Temperature in Kelvin for MC simulation.
+            J1, J2, J3 (float): Isotropic exchange parameters in eV for 1st, 2nd, 3rd neighbors.
+            A (float): Single-ion anisotropy parameter in eV.
+            Jxx, Jyy, Jzz, Jxy, Jxz, Jyz (float): Anisotropic exchange parameters (eV) for 1st NN.
+            g (float): Landé g-factor.
+            gamma (float): Electric-field coupling constant in e·Å (e is electron charge).
+            B_z (float): Magnetic field (Tesla).
+            E_z (float): Electric field (V/Å).
+            spin_magnitude (float): Spin magnitude (e.g., 0.5 for spin-1/2, 1 for spin-1, etc.).
+            orientations_lst (list of (float, float)): Possible (theta, phi) in degrees.
+            f_neighbor_array, s_neighbor_array, t_neighbor_array (np.ndarray): 
+                Indices of 1st, 2nd, 3rd neighbors for each spin site.
+            random_seed (int, optional): Random seed for reproducibility.
         """
-        
         self.structure = structure
         self.n_spins = len(structure)
         self.temperature = temperature
+        
+        # Isotropic exchanges
         self.J1 = J1
         self.J2 = J2
         self.J3 = J3
-        self.L = L
+        
+        # Anisotropic exchange parameters (for 1st neighbors)
+        self.Jxx = Jxx
+        self.Jyy = Jyy
+        self.Jzz = Jzz
+        self.Jxy = Jxy
+        self.Jxz = Jxz
+        self.Jyz = Jyz
+
+        # Single-ion anisotropy
         self.A = A
 
-        self.g = g          
-        self.gamma = gamma  
-        self.B_z = B_z      
-        self.E_z = E_z      
+        # Zeeman and electric field parameters
+        self.g = g
+        self.gamma = gamma
+        self.B_z = B_z
+        self.E_z = E_z
+     
+        self.spin_magnitude = spin_magnitude
 
         self.orientations_lst = orientations_lst
         self.f_neighbor_array = f_neighbor_array
@@ -121,49 +172,100 @@ class Spin_MonteCarlo_Simulator:
         Returns:
             float: Total energy of the configuration.
         """
+        # Convert angles to radians
         theta = np.radians(proposed_spin_config[:, 2])
         phi = np.radians(proposed_spin_config[:, 3])
-  
 
-        sin_theta_i = np.sin(theta)[:, np.newaxis]
-        sin_theta_j = np.sin(theta)[self.f_neighbor_array]
-        sin_theta_k = np.sin(theta)[self.s_neighbor_array]
-        sin_theta_l = np.sin(theta)[self.t_neighbor_array]
-                 
-        cos_theta_i = np.cos(theta)[:, np.newaxis]
-        cos_theta_j = np.cos(theta)[self.f_neighbor_array]
-        cos_theta_k = np.cos(theta)[self.s_neighbor_array]
-        cos_theta_l = np.cos(theta)[self.t_neighbor_array]
-        
-        cos_phi_ij = np.cos(phi[:, np.newaxis] - phi[self.f_neighbor_array])
-        cos_phi_ik = np.cos(phi[:, np.newaxis] - phi[self.s_neighbor_array])
-        cos_phi_il = np.cos(phi[:, np.newaxis] - phi[self.t_neighbor_array])
-        
-        # Calculate the isotropic exchange energy term for each spin
-        f_iso_ex_energy = (-self.J1 / 2) * np.sum(sin_theta_i * sin_theta_j * cos_phi_ij + cos_theta_i * cos_theta_j, axis=1)
-        s_iso_ex_energy = (-self.J2 / 2) * np.sum(sin_theta_i * sin_theta_k * cos_phi_ik + cos_theta_i * cos_theta_k, axis=1)
-        t_iso_ex_energy = (-self.J3 / 2) * np.sum(sin_theta_i * sin_theta_l * cos_phi_il + cos_theta_i * cos_theta_l, axis=1)
+        # Spherical to Cartesian spin components, scaled by spin_magnitude
+        # Sx = S sinθ cosφ, Sy = S sinθ sinφ, Sz = S cosθ
+        Sx = self.spin_magnitude * np.sin(theta) * np.cos(phi)
+        Sy = self.spin_magnitude * np.sin(theta) * np.sin(phi)
+        Sz = self.spin_magnitude * np.cos(theta)
 
-        # Calculate the anisotropic symmetric exchange energy term for each spin
-        aniso_symm_ex_energy =  (-self.L / 2) * np.sum(cos_theta_i*cos_theta_j, axis=1)      
-        # Calculate the easy-axis single ion anisotropy energy term for each spin
-        EA_single_ion_aniso_energy =  (-self.A / 1) * np.squeeze(cos_theta_i**2)
+        # For convenience, define expansions for i (current site) and for neighbor arrays
+        Sx_i = Sx[:, np.newaxis]
+        Sy_i = Sy[:, np.newaxis]
+        Sz_i = Sz[:, np.newaxis]
 
+        Sx_j_1 = Sx[self.f_neighbor_array]  # 1st neighbors
+        Sy_j_1 = Sy[self.f_neighbor_array]
+        Sz_j_1 = Sz[self.f_neighbor_array]
 
-        # **Add the Zeeman and Electric Field Energy Terms**
-        mu_B = 5.78838e-5  # Bohr magneton in eV/Tesla
-        # Zeeman Energy Term
-        E_Zeeman = -self.g * mu_B * self.B_z * np.squeeze(cos_theta_i)  # Resulting E_Zeeman in eV
+        Sx_j_2 = Sx[self.s_neighbor_array]  # 2nd neighbors
+        Sy_j_2 = Sy[self.s_neighbor_array]
+        Sz_j_2 = Sz[self.s_neighbor_array]
 
-        # Electric Field Energy Term
-        E_Electric = -self.gamma * self.E_z * np.squeeze(cos_theta_i)   # Resulting E_Electric in eV
+        Sx_j_3 = Sx[self.t_neighbor_array]  # 3rd neighbors
+        Sy_j_3 = Sy[self.t_neighbor_array]
+        Sz_j_3 = Sz[self.t_neighbor_array]
 
-   
-        # Calculate the total site energy for each spin
-        site_energies = (f_iso_ex_energy + s_iso_ex_energy + t_iso_ex_energy) + aniso_symm_ex_energy + EA_single_ion_aniso_energy + E_Zeeman + E_Electric
+        #--------------------------------------------------------------------------
+        # 1) Isotropic exchange: J1 for 1st NN, J2 for 2nd NN, J3 for 3rd NN
+        #--------------------------------------------------------------------------
+        #   Each sum is multiplied by -J/2 to avoid double-counting the pair i-j
+        #   term, since we sum over i plus its neighbor j.
+        #--------------------------------------------------------------------------
+        f_iso_ex_energy = (
+            -self.J1 / 2.0
+            * np.sum(Sx_i * Sx_j_1 + Sy_i * Sy_j_1 + Sz_i * Sz_j_1, axis=1)
+        )
+        s_iso_ex_energy = (
+            -self.J2 / 2.0
+            * np.sum(Sx_i * Sx_j_2 + Sy_i * Sy_j_2 + Sz_i * Sz_j_2, axis=1)
+        )
+        t_iso_ex_energy = (
+            -self.J3 / 2.0
+            * np.sum(Sx_i * Sx_j_3 + Sy_i * Sy_j_3 + Sz_i * Sz_j_3, axis=1)
+        )
+
+        #--------------------------------------------------------------------------
+        # 2) Anisotropic exchange (first neighbors only): 
+        #    - (Jxx/2) Σ Sx_i*Sx_j  - (Jyy/2) Σ Sy_i*Sy_j  - (Jzz/2) Σ Sz_i*Sz_j
+        #    - (Jxy/2) Σ Sx_i*Sy_j  - (Jxz/2) Σ Sx_i*Sz_j  - (Jyz/2) Σ Sy_i*Sz_j
+        #--------------------------------------------------------------------------
+        # Note: We sum over the 1st neighbors only, multiplied by -1/2 to handle pairs
+        #--------------------------------------------------------------------------
+        aniso_first_ex_energy = -0.5 * np.sum(
+            self.Jxx * (Sx_i * Sx_j_1)
+            + self.Jyy * (Sy_i * Sy_j_1)
+            + self.Jzz * (Sz_i * Sz_j_1)
+            + self.Jxy * (Sx_i * Sy_j_1)
+            + self.Jxz * (Sx_i * Sz_j_1)
+            + self.Jyz * (Sy_i * Sz_j_1),
+            axis=1
+        )
+
+        #--------------------------------------------------------------------------
+        # 3) Single-ion anisotropy: - A Σ (Sz_i)^2  (easy axis = z-axis)
+        #--------------------------------------------------------------------------
+        single_ion_aniso_energy = -self.A * (Sz**2)
+
+                #--------------------------------------------------------------------------
+        # 4) Zeeman Term: - g μ_B Bz Σ Sz_i
+        #    (μ_B = 5.78838e-5 eV/T, so net factor = - g * μ_B * Bz * Sz)
+        #--------------------------------------------------------------------------
+        mu_B = 5.78838e-5  # Bohr magneton in eV/T
+        zeeman_energy = -self.g * mu_B * self.B_z * Sz
+
+        #--------------------------------------------------------------------------
+        # 5) Electric Field Term: - γ E_z Σ Sz_i
+        #    with γ in e·Å, E_z in V/Å => product in eV (1 e in eV = 1)
+        #--------------------------------------------------------------------------
+        electric_energy = -self.gamma * self.E_z * Sz
+
+        # Sum everything to get site-wise energies
+        site_energies = (
+            f_iso_ex_energy
+            + s_iso_ex_energy
+            + t_iso_ex_energy
+            + aniso_first_ex_energy
+            + single_ion_aniso_energy
+            + zeeman_energy
+            + electric_energy
+        )
 
         return site_energies
-                                            
+                   
 
     def monte_carlo_simulation(self, initial_spin_config, sampling_sweep, sample_size, sampling_interval):
         """
@@ -414,7 +516,7 @@ def calculate_local_solid_angles(spin_config):
 
     # ---------------------------------------------------------------
     # 6) LOCAL SOLID ANGLES
-    raw_angles = 2.0 * np.arctan2(numerator, denom)
+    raw_angles = 2.0 * np.arctan2(np.abs(numerator), denom)
     local_omegas = sign_normal * raw_angles   # shape (NT,)
 
     # ---------------------------------------------------------------

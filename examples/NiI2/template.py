@@ -21,11 +21,12 @@ import SpinMC
 n_cells = 40
 temperature = {T}
 
-J1 =; J2 =; J3= ; L = ; A =  # in eV
-g = ...           # Replace with actual g-factor
-gamma = ...       # Replace with actual gamma in e·Å
-B_z = {B_z}       # Magnetic field strength in Tesla
-E_z = {E_z}       # Electric field strength in V/Å
+J1 =; J2 =; J3= ; Jxx =; Jyy =; Jzz= ; Jxy =; Jxz =; Jyz= ; ; A =  # in eV
+g = ...             # Replace with actual g-factor
+gamma = ...         # Replace with actual gamma in e·Å
+B_z = {B_z}         # Magnetic field strength in Tesla
+E_z = {E_z}         # Electric field strength in V/Å
+spin_magnitude = ,  # Spin magnitude parameter
 angular_res = 0.5
 cutoff_distance = 3.96124 + 0.1  # on-lattice Ni-Ni distance + skin distance 
 sampling_sweep = {sampling_sweep}; sample_size = 2e4; sampling_interval = 1
@@ -126,7 +127,7 @@ print('Successfully got the neighbors array ....')
 # Run Monte Carlo
 ##################
 # Initiate MC simulator
-mc_simulator = SpinMC.Spin_MonteCarlo_Simulator(super_struc, temperature, J1, J2, J3, L, A, g, gamma, B_z, E_z,
+mc_simulator = SpinMC.Spin_MonteCarlo_Simulator(super_struc, temperature, J1, J2, J3, Jxx, Jyy, Jzz, Jxy, Jxz, Jyz, A, g, gamma, B_z, E_z, spin_magnitude,
                                                 orientations_lst, f_neighbor_array, s_neighbor_array, t_neighbor_array, random_seed=42)
 
 # Generate initial spin config
@@ -146,8 +147,8 @@ print("Finished successfully ...")
 def copy_common_files(folder_name):
     shutil.copy('SpinMC.py', folder_name)
     shutil.copy('submission-script', folder_name)
-    # Ensure 'POSCAR-conv' is copied to the folder
-    shutil.copy('POSCAR-conv', folder_name)
+    # Ensure 'POSCAR-prim' is copied to the folder
+    shutil.copy('POSCAR-prim', folder_name)
 
 def run_sbatch(folder_name):
     os.chdir(folder_name)
